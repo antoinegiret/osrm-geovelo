@@ -100,6 +100,25 @@ void RestrictionParser::ReadRestrictionExceptions(lua_State *lua_state)
     {
         SimpleLogger().Write() << "Found no exceptions to turn restrictions";
     }
+
+    if (lua_function_exists(lua_state, "get_ignored_bicycle_restrictions"))
+    {
+        luabind::set_pcall_callback(&lua_error_callback);
+        // get list of bicycle turn restriction ignored
+        luabind::call_function<void>(lua_state, "get_ignored_bicycle_restrictions",
+				     boost::ref(bicycle_restrictions_ignored));
+        const unsigned ignored_count = bicycle_restrictions_ignored.size();
+        SimpleLogger().Write() << "Found " << ignored_count
+                               << " ignored bicycle turn restrictions:";
+        for (const std::string &str : bicycle_restrictions_ignored)
+        {
+            SimpleLogger().Write() << "  " << str;
+        }
+    }
+    else
+    {
+        SimpleLogger().Write() << "Found no ignored turn restrictions";
+    }
 }
 
 /**
@@ -135,6 +154,12 @@ RestrictionParser::TryParse(const osmium::Relation &relation) const
     // check if the restriction should be ignored
     const char *except = relation.get_value_by_key("except");
     if (except != nullptr && ShouldIgnoreRestriction(except))
+    {
+        return mapbox::util::optional<InputRestrictionContainer>();
+    }
+
+    const char *bicycle_restriction = relation.get_value_by_key("restriction:bicycle");
+    if (bicycle_restriction != nullptr && ShouldIgnoreBicycleRestriction(bicycle_restriction))
     {
         return mapbox::util::optional<InputRestrictionContainer>();
     }
@@ -237,3 +262,14 @@ bool RestrictionParser::ShouldIgnoreRestriction(const std::string &except_tag_st
                            return false;
                        });
 }
+
+bool RestrictionParser::ShouldIgnoreBicycleRestriction(const std::string &restriction_tag_string) const
+{
+    const auto string_iterator = std::find(bicycle_restrictions_ignored.begin(), bicycle_restrictions_ignored.end(), restriction_tag_string);
+    if (bicycle_restrictions_ignored.end() != string_iterator)
+    {
+        return true;
+    }
+    
+    return false;
+ }
